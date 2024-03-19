@@ -12,6 +12,6 @@ COPY ./configs/config.ini /app/configs/config.ini
 
 WORKDIR /app
 
-EXPOSE 443
+EXPOSE 80
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "443"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "80"]
