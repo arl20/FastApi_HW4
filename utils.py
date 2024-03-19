@@ -6,19 +6,22 @@ import psycopg2
 from scipy.sparse import csr_matrix, load_npz
 from sshtunnel import SSHTunnelForwarder
 import logging
+import os
+from dotenv import load_dotenv
 
 def get_conn():
+    load_dotenv()
     config = configparser.ConfigParser()
     config.read('configs/config.ini')
-    ssh_host = config.get('server', 'ssh_host')
-    ssh_user = config.get('server', 'ssh_user')
-    ssh_password = config.get('server', 'ssh_password')
-    ssh_port = config.getint('server', 'ssh_port')
-    db_host = config.get('server', 'db_host')
-    db_user = config.get('server', 'db_user')
-    db_password = config.get('server', 'db_password')
-    db_port = config.getint('server', 'db_port')
-    db_name = config.get('server', 'db_name')
+    ssh_host = os.getenv("SSH_HOST")
+    ssh_user = os.getenv("SSH_USER")
+    ssh_password =  os.getenv("SSH_PASSWORD")
+    ssh_port = int(os.getenv("SSH_PORT"))
+    db_host =  os.getenv("DB_HOST")
+    db_user = os.getenv("DB_USER")
+    db_password = os.getenv("DB_PASSWORD")
+    db_port = int(os.getenv("DB_PORT"))
+    db_name = os.getenv("DB_NAME")
     tunnel = SSHTunnelForwarder(
     (ssh_host, ssh_port),
     ssh_username=ssh_user,

@@ -369,7 +369,7 @@ async def get_recommended_game(current_user: User, redis: aioredis.Redis = Depen
     new_list = await asyncio.to_thread(get_new_recommendations, app.df, k_games)
     new_list_answer = '\n'.join(map(get_game_link, new_list))
     if len(list_games) == 0:
-        info="""К сожалению, вы не дали мне информации
+        info=f"""К сожалению, вы не дали мне информации
  о ваших любимых играх, поэтому я не могу сделать персональную рекомендацию. Но вы можете поиграть в самые популярные игры!
 <b>Популярные игры с высоким рейтингом:</b>
 {popular_list_answer}\n
