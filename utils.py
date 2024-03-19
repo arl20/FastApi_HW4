@@ -26,8 +26,6 @@ def get_conn():
     remote_bind_address=(db_host, db_port)
     )
     tunnel.start()
-    with open('log_file.txt', mode = 'w') as file:
-          print(db_user, db_password, db_host, db_port, ssh_host, ssh_user, ssh_password, ssh_port, file=file)
     conn = psycopg2.connect(
             user=db_user,
             password=db_password,

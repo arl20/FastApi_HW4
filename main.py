@@ -1,5 +1,5 @@
 from enum import Enum
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, Query
 from fastapi_users import FastAPIUsers, models
 from fastapi_users.authentication import AuthenticationBackend, CookieTransport
 from fastapi.responses import Response, JSONResponse
@@ -136,18 +136,35 @@ async def start():
 
 
 @app.post("/register")
-async def register(user: User, k_games: int = 10):
+async def register(user: User, k_games: int = Query(10, description="Количество игр, которое будет порекомендовано пользователю")):
+    """
+    Регистрация пользователя
+    """
     hashed_password = pwd_context.hash(user.password)
     res = create_user(user.user_id, k_games, hashed_password)
     if res:
         return {"message" : f"Пользователь c id {user.user_id} зарегистрирован"}
     else:
         raise HTTPException(status_code=422, detail=f"Пользователь с user_id {user.user_id} уже существует")
+        
+@app.get("/get_list_of_all_game")
+async def get_list_of_all_game(query: str = Query(None, description="Необязательный параметр. \
+Если он заполнен, то возвращаются только игры, \
+которые содержат конкретную подстроку.")):
+    """
+    Получение списка всех игр из базы.\n
+    """
+    if query is None:
+        return {"list" : list(app.games_info_dict_by_name.keys())}
+    else:
+        return {"list" : [game for game in app.games_info_dict_by_name if query.lower() in game.lower()]}
     
 @app.post("/add_game")
-async def add_game(game: str, 
-                   current_user: User,
-                   K_GAMES: int = 10):
+async def add_game(current_user: User,
+                   game: str = Query(description="Название игры из списка игр")):
+    """
+    Добавление игры в список любимых игр пользователя 
+    """
     if not check_auth(current_user):
         raise HTTPException(status_code=401, detail="Authentication failed")
     user_id = current_user.user_id
@@ -162,7 +179,7 @@ async def add_game(game: str,
     if not pwd_context.verify(current_user.password, hashed_password):
         raise HTTPException(status_code=401, detail="Authentication failed")
     if len(games) > 0:
-        games = set([games[0]])
+        games = set(games)
     else:
         games = set()
     games.add(appid)
@@ -178,9 +195,11 @@ async def add_game(game: str,
 
 
 @app.post("/delete_game")
-async def delete_game(game, 
-                   current_user: User,
-                   K_GAMES: int = 10):
+async def delete_game(current_user: User,
+                      game = Query(description="Название игры из списка игр")):
+    """
+    Удаление игры из списка любимых игр пользователя 
+    """
     if not check_auth(current_user):
         raise HTTPException(status_code=401, detail="Authentication failed")
     user_id = current_user.user_id
@@ -195,7 +214,7 @@ async def delete_game(game,
     try:
         games.remove(appid)
         cursor.execute(f"UPDATE users SET list_games = ARRAY{str(sorted(games))}::integer[] WHERE id = {user_id}")
-        info = f"Игра {game} удалена из списка ваших любимых игр"
+        info = f"Игра {game} удалена из списка ваших любимых игр"     
     except (KeyError, ValueError):
         info = "Данной игры нет в вашем списке"
     cursor.close()
@@ -205,8 +224,10 @@ async def delete_game(game,
     return Response(content=info, status_code=200, media_type="text/html")
     
 @app.get("/info_game")
-@cached(ttl=60)
-async def info_game(game):
+async def info_game(game: str = Query(description="Название игры из списка игр")):
+    """
+    Информация о конкретной игре
+    """
     try:
         appid = app.games_info_dict_by_name[game]['AppID']
         info = f"""Информация об игре {app.games_info_dict[appid]['Name']}
@@ -220,41 +241,36 @@ async def info_game(game):
         raise HTTPException(status_code=422, detail="Игра не найдена")
     
 @app.post("/similar_games")
-async def similar_games(game, current_user: User, redis: aioredis.Redis = Depends(get_redis)):
-    if not check_auth(current_user):
-        raise HTTPException(status_code=401, detail="Authentication failed")
-    user_id = current_user.user_id
-    cached_info = await redis.get(f"user:{user_id}:similar_games")
-    if cached_info:
-        return Response(content=cached_info.decode(), status_code=200, media_type="text/html")
+async def similar_games(k_games: int = Query(description="Количество игр"),
+                        game = Query(description="Название игры из списка игр"),
+                        redis: aioredis.Redis = Depends(get_redis)):
+    """
+    Получение списка игр, похожих на конкретную игру
+    """
     try:
         appid = app.games_info_dict_by_name[game]['AppID']
     except KeyError:
         return {"message": f"Игра {game} не найдена"}
-    tunnel, conn = get_conn()
-    cursor = conn.cursor()
-    cursor.execute(f"select k_games from users where id = {user_id}")
-    k_games = cursor.fetchone()
-    if len(k_games) == 0:
-        create_user(user_id, k_games[0])
-    cursor.close()
-    conn.commit()
-    conn.close()
-    tunnel.stop()
+    cached_info = await redis.get(f"{appid}:{k_games}:similar_games")
+    if cached_info:
+        return Response(content=cached_info.decode(), status_code=200, media_type="text/html")
     recommendations_by_game = await asyncio.to_thread(get_recommendations_by_game,
                                                       app.similar_games_df,
-                                                      [appid], k_games[0])
+                                                      [appid], k_games)
     get_game_link = partial(get_link, games_info_dict=app.games_info_dict)
     recommendations_by_game_answer = '\n'.join(map(get_game_link, recommendations_by_game))
     info = f"""<b> Игры, похожие на игру {game}:</b>
 {recommendations_by_game_answer}
 """
-    await redis.set(f"user:{user_id}:similar_games", info)
-    await redis.expire(f"user:{user_id}:similar_games", 60)
+    await redis.set(f"{appid}:{k_games}:similar_games", info)
+    await redis.expire(f"{appid}:{k_games}:similar_games", 3600)
     return Response(content=info, status_code=200, media_type="text/html")
     
 @app.post("/set_k")
 async def set_k_games(current_user: User, k: int):
+    """
+    Установка количества игр k для пользователя
+    """
     if not check_auth(current_user):
         raise HTTPException(status_code=401, detail="Authentication failed")
     user_id = current_user.user_id
@@ -282,31 +298,32 @@ async def set_k_games(current_user: User, k: int):
     return Response(content=info, status_code=200, media_type="text/html")
         
 @app.post("/get_list_of_game")
-async def get_list_of_game(current_user: User, redis: aioredis.Redis = Depends(get_redis)):
+async def get_list_of_game(current_user: User):
+    """
+    Получение списка любимых игр пользователя
+    """
     if not check_auth(current_user):
         raise HTTPException(status_code=401, detail="Authentication failed")
     user_id = current_user.user_id
-    cached_info = await redis.get(f"user:{user_id}:list_of_games")
-    if cached_info:
-        return Response(content=cached_info.decode(), status_code=200, media_type="text/html")
     tunnel, conn = get_conn()
     cursor = conn.cursor()
     cursor.execute(f"select list_games from users where id = {user_id}")
     games = cursor.fetchone()[0]
-    if len(games) == 0:
-        info = 'Список ваших любимых игр пуст\n'
-    else:
-        info = 'Текущий список ваших любимых игр:\n' + '\n'.join(sorted(map(lambda x: app.games_info_dict[x]['Name'], games)))
     cursor.close()
     conn.commit()
     conn.close()
     tunnel.stop()
-    await redis.set(f"user:{user_id}:list_of_games", info)
-    await redis.expire(f"user:{user_id}:list_of_games", 60)
+    if len(games) == 0:
+        info = 'Список ваших любимых игр пуст\n'
+    else:
+        info = 'Текущий список ваших любимых игр:\n' + '\n'.join(sorted(map(lambda x: app.games_info_dict[x]['Name'], games)))
     return Response(content=info, status_code=200, media_type="text/html")
     
 @app.post("/clear_list_of_game")
 async def clear_list_of_game(current_user: User):
+    """
+    Очистка списка любимых игр пользователя
+    """
     if not check_auth(current_user):
         raise HTTPException(status_code=401, detail="Authentication failed")
     user_id = current_user.user_id
@@ -322,12 +339,15 @@ async def clear_list_of_game(current_user: User):
 
 @app.post("/get_recommended_game")
 async def get_recommended_game(current_user: User, redis: aioredis.Redis = Depends(get_redis)):
+    """
+    Получение рекомендации игр (ML-часть)
+    """
     if not check_auth(current_user):
         raise HTTPException(status_code=401, detail="Authentication failed")
     user_id = current_user.user_id
-    cached_info = await redis.get(f"user:{user_id}:recommended_game")
-    if cached_info:
-        return Response(content=cached_info.decode(), status_code=200, media_type="text/html")
+    cached_last_list = await redis.get(f"user:{user_id}:list_of_games_before_last_recommendation")
+    cached_k = await redis.get(f"user:{user_id}:k_before_last_recommendation")
+    cached_recommendation = await redis.get(f"user:{user_id}:recommended_game")
     tunnel, conn = get_conn()
     cursor = conn.cursor()
     cursor.execute(f"select k_games, list_games, hashed_password from users where id = {user_id}")
@@ -339,6 +359,10 @@ async def get_recommended_game(current_user: User, redis: aioredis.Redis = Depen
     conn.commit()
     conn.close()
     tunnel.stop()
+    if cached_recommendation and cached_last_list and cached_k \
+    and cached_last_list.decode() ==  ' '.join(map(str, sorted(set(list_games)))) \
+    and int(cached_k.decode()) == k_games:
+        return Response(content=cached_recommendation.decode(), status_code=200, media_type="text/html")        
     get_game_link = partial(get_link, games_info_dict=app.games_info_dict)
     popular_list = await asyncio.to_thread(get_popular_recommendations, app.df, k_games)
     popular_list_answer = '\n'.join(map(get_game_link, popular_list))
@@ -372,11 +396,17 @@ async def get_recommended_game(current_user: User, redis: aioredis.Redis = Depen
 <b>Набирающие популярность новинки:</b>
 {new_list_answer}"""
     await redis.set(f"user:{user_id}:recommended_game", info)
-    await redis.expire(f"user:{user_id}:recommended_game", 60)
+    await redis.set(f"user:{user_id}:list_of_games_before_last_recommendation", ' '.join(map(str, sorted(set(list_games)))))
+    await redis.set(f"user:{user_id}:k_before_last_recommendation", k_games)
     return Response(content=info, status_code=200, media_type="text/html")
 
 @app.post("/post_review")
-async def post_review(current_user: User, score: int, review: str):
+async def post_review(current_user: User, 
+                      score: int = Query(description="Оценка от 1 до 5"), 
+                      review: str = Query(description="Отзыв")):
+    """
+    Отправка отзыва о сервисе
+    """
     if not check_auth(current_user):
         raise HTTPException(status_code=401, detail="Authentication failed")
     timestamp = str(datetime.datetime.fromtimestamp(time.time()))
@@ -389,4 +419,4 @@ async def post_review(current_user: User, score: int, review: str):
     conn.commit()
     conn.close()
     tunnel.stop()
-    return Response(content="Спасибо за отзыв", status_code=200, media_type="text/html")
+    return Response(content=f"Спасибо за отзыв!\n Ваш отзыв: {review}", status_code=200, media_type="text/html")
