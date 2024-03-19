@@ -27,6 +27,7 @@ import logging
 import datetime
 from functools import partial
 import asyncio
+import os
 from functions_for_recommendation import (games_chosen_to_matrix_line,
                                                 get_link,
                                                 get_new_recommendations,
@@ -64,7 +65,7 @@ class App(FastAPI):
         config = configparser.ConfigParser()
         config.read('configs/config.ini')
         self.K_NEIGHBOURS = config.getint('bot', 'K_NEIGHBOURS')
-        URL = config.get('bot', 'URL')
+        URL = os.getenv("URL")
         try:
             self.df, self.matrix, self.app_id_to_index, self.user_id_to_index, self.similar_games_df = load_data()
         except FileNotFoundError:
@@ -78,18 +79,6 @@ class App(FastAPI):
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")        
 app = App()
-
-config = configparser.ConfigParser()
-config.read('configs/config.ini')
-ssh_host = config.get('server', 'ssh_host')
-ssh_user = config.get('server', 'ssh_user')
-ssh_password = config.get('server', 'ssh_password')
-ssh_port = config.getint('server', 'ssh_port')
-db_host = config.get('server', 'db_host')
-db_user = config.get('server', 'db_user')
-db_password = config.get('server', 'db_password')
-db_port = config.getint('server', 'db_port')
-db_name = config.get('server', 'db_name')
 
 class User(BaseModel):
     user_id: int
