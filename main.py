@@ -38,7 +38,8 @@ from functions_for_recommendation import (games_chosen_to_matrix_line,
 
 
 async def get_redis():
-    redis = await aioredis.Redis.from_url('redis://localhost')
+    REDIS_URL = os.getenv("REDIS_URL")
+    redis = await aioredis.Redis.from_url(REDIS_URL)
     yield redis
     redis.close()
     
