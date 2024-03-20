@@ -38,10 +38,10 @@ from functions_for_recommendation import (games_chosen_to_matrix_line,
 
 
 async def get_redis():
-    REDIS_URL = os.getenv("REDIS_URL")
+    host = os.getenv("REDIS_HOST")
     password = os.getenv("REDIS_PASSWORD")
     username = os.getenv("REDIS_USERNAME")
-    redis = await aioredis.Redis.from_url(REDIS_URL, username = username, password = password)
+    redis = await aioredis.Redis(host = host, port = 6379, username = username, password = password)
     yield redis
     redis.close()
     
