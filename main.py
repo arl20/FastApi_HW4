@@ -9,6 +9,7 @@ from typing import List
 import time
 import pandas as pd
 import gdown
+from dotenv import load_dotenv
 import json
 from scipy.sparse import csr_matrix, load_npz
 import configparser
@@ -80,7 +81,8 @@ class App(FastAPI):
                                              'Required age', 'About the game',
                                              'Supported languages', 'Genres']].to_dict(orient='index')
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")        
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")  
+load_dotenv()
 app = App()
 
 class User(BaseModel):
@@ -107,18 +109,18 @@ def check_auth(user: User):
     
 @app.get("/")
 async def start():
-    info = f"""Cписок функций:
-<b> /register</b> — регистрация
-<b> /get_list_of_all_game</b> - получить список всех игр (либо игр, название которых содержит определенную по><b> /add_game</b> — добавить игру к списку для рекомендаций
-<b> /delete_game</b> — удалить игру из списка для рекомендаций
-<b> /info_game</b> — информация о конкретной игре
-<b> /similar_games</b> - рекомендация игр, похожих на конкретную игру
-<b> /get_list_of_game</b> — получение текущего списка любимых игр
-<b> /clear_list_of_game</b> — очистка списка любимых игр
-<b> /set_k</b> — установить значение количества рекомендуемых игр
-<b>/similar_games</b> —  порекомендовать игры, похожие на конкретную игру
-<b>/get_recommended_game</b> - получение игр для рекомендации
-<b> /post_review</b> — оставить отзыв о работе сервиса
+    info = f"""Cписок функций:<br/>
+<b> /register</b> — регистрация<br/>
+<b> /get_list_of_all_game</b> - получить список всех игр (либо игр, название которых содержит определенную по><b> /add_game</b> — добавить игру к списку для рекомендаций<br/>
+<b> /delete_game</b> — удалить игру из списка для рекомендаций<br/>
+<b> /info_game</b> — информация о конкретной игре<br/>
+<b> /similar_games</b> - рекомендация игр, похожих на конкретную игру<br/>
+<b> /get_list_of_game</b> — получение текущего списка любимых игр<br/>
+<b> /clear_list_of_game</b> — очистка списка любимых игр<br/>
+<b> /set_k</b> — установить значение количества рекомендуемых игр<br/>
+<b>/similar_games</b> —  порекомендовать игры, похожие на конкретную игру<br/>
+<b>/get_recommended_game</b> - получение игр для рекомендации<br/>
+<b> /post_review</b> — оставить отзыв о работе сервиса<br/>
 """
     return Response(content=info, status_code=200, media_type="text/html")
   
